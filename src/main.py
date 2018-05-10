@@ -6,6 +6,8 @@ Created on May 10, 2018
 import json
 from enum import Enum
 from pyx import *
+from queue import *
+from gettext import find
 
 # Ebnumerator for tile types
 class Tile(Enum):
@@ -37,14 +39,9 @@ def ConvertJsonMapToArrays (jsonfilename,debug = False):
     if debug: print (len(rows))
     
     # Return data
-    return [map(int,row) for row in rows]
-    
+    return [[int(x) for x in row] for row in rows]
 
-if __name__ == '__main__':
-    # Fetch the data
-    data = ConvertJsonMapToArrays('data/testdata01.json', True)
-    
-    # Categorize the rows into blobs
+def BasicMapGenerator(data):
     c = canvas.canvas()
     rowblobs = []
     for row in data:
@@ -66,7 +63,7 @@ if __name__ == '__main__':
         # Add last running blob to blob
         blobs.append((previousItem,runningBlob))
         rowblobs.append(blobs)  
-
+    
     # Draw Row blobs
     for rowPos,blobs in enumerate(rowblobs[::-1]):
         colPos = 0
@@ -96,17 +93,74 @@ if __name__ == '__main__':
                              itemColor
                         ])
             # At the end of the blob, move new pen x-pos origin to blob size
-            colPos += blobSize
-            
-    '''      
-        rect1 = path.path(  path.moveto(4,0),
-                            path.lineto(5,0),
-                            path.lineto(5,1),
-                            path.lineto(4,1),
-                            path.closepath()
-                         )
-        c.stroke(rect1, [style.linewidth.THICK])'''
-    
-    # Write to SVG file
+            colPos += blobSize  
+    # Write svg 
     c.writeSVGfile('output/testy')
+
+def FindNeighbours(data, width, height, start_x, start_y, pixelFlags):
+    listOfNeighbours = []
+    
+    q = Queue()
+    q.put_nowait((start_x,start_y))
+    
+    while not q.empty():
+        (px,py) = q.get_nowait()
+        tileType = Tile(data[px][py])
+        for x in range(px-1,px+2):
+            for y in range(py-1,py+2):
+                if IsInMapRange(x, y, width, height) and (x == px or y == py) :
+                    if Tile(data[x][y]) == tileType and not pixelFlags[x][y]:
+                        pixelFlags[x][y] = 1
+                        listOfNeighbours.append((x,y))
+                        q.put_nowait((x,y))
+                        
+    return listOfNeighbours
+
+def IsInMapRange(x,y,width,height):
+    return not (x < 0 or x >= width or y < 0 or y >= height)
+
+if __name__ == '__main__':
+    # Fetch the data
+    data = ConvertJsonMapToArrays('data/testdata01.json', True)
+
+    #BasicMapGenerator(data)
+    c = canvas.canvas()
+    
+    width = len(data[0])
+    height = len(data)
+    pixelFlags = [[0] * width for _ in range(height)]
+    
+    listy = FindNeighbours(data, width, height, 0, 0, pixelFlags)
+    
+    itemColor = TileToColor[Tile(1)]
+    begin_x, begin_y = listy[0]
+    
+    '''
+    for row in data:
+        print ("".join(map(str,row)))
+    '''
+    
+    outline = []
+    rect = path.path()
+    for (x,y) in listy: 
+        rect.append(path.moveto(y,x))
+                        # Move to current colomn position within the row
+        rect.append(path.lineto(y+1,x))
+        rect.append(path.lineto(y+1,x+1))
+        rect.append(path.lineto(y,x+1))
+        rect.append(path.closepath())                                
+
+                    
+    # Draw the box on the canvas
+    c.stroke(rect, 
+             [
+                 style.linewidth.THICK,
+                 #deco.filled([itemColor]),
+                 itemColor
+            ])
+    cc = canvas.canvas()
+    cc.insert(c,[trafo.mirror()])
+    cc.writeSVGfile('output/testy')
+    
+    
     print ('Done')
