@@ -24,6 +24,10 @@ TileToColor = {
     Tile.UNKOWN :   color.rgb.blue
 }
 
+BlockSize = 100
+hBlockSize = BlockSize / 2
+global width, height, data
+
 def ConvertJsonMapToArrays (jsonfilename,debug = False):
     ''' Converts json file from Screeps into 50x50 rows to be manipulated '''
     # load json file and extract data
@@ -116,48 +120,143 @@ def FindNeighbours(data, width, height, start_x, start_y, pixelFlags):
                         
     return listOfNeighbours
 
-def IsInMapRange(x,y,width,height):
+def TopMid (x,y):
+    return x + hBlockSize, y
+def LeftMid (x,y):
+    return x, y + hBlockSize
+def BotMid (x,y):
+    return x + hBlockSize, y + BlockSize
+def RightMid (x,y):
+    return x + BlockSize, y + hBlockSize
+
+def NV (pos,x,y):
+    ''' Determines the value of the neighbourhood pixel '''
+    '''     012
+            3♥5
+            678 where ♥ = position of our pixel ''' 
+    tileType = Tile(data[x][y])
+    relX = 0
+    relY = 0
+    if (pos == 0):
+        relY = -1
+        relX = -1
+    elif(pos == 1):
+        relX = -1
+    elif(pos == 2):
+        relY = 1
+        relX = -1
+    elif(pos == 3):
+        relY = -1
+    elif(pos == 5):
+        relY = 1
+    elif(pos == 6):
+        relY = -1
+        relX = 1
+    elif(pos == 7):
+        relX = 1
+    elif(pos == 8):
+        relY = 1
+        relX = 1
+    deltaX = x + relX
+    deltaY = y + relY
+    if deltaX < 0 or deltaX >= width or deltaY < 0 or deltaY >= height:
+        return tileType == Tile.WALL
+    else:
+        return tileType == Tile(data[deltaX][deltaY])
+    
+    
+
+def IsInMapRange(x,y):
     return not (x < 0 or x >= width or y < 0 or y >= height)
 
 if __name__ == '__main__':
     # Fetch the data
-    data = ConvertJsonMapToArrays('data/testdata01.json', True)
+    data = ConvertJsonMapToArrays('data/testdata01.json', False)
 
     #BasicMapGenerator(data)
     c = canvas.canvas()
     
+    data = [[1,0,0,0],[1,1,0,0],[0,1,0,0],[0,1,0,0]]
+    
     width = len(data[0])
     height = len(data)
+    
     pixelFlags = [[0] * width for _ in range(height)]
     
-    listy = FindNeighbours(data, width, height, 0, 0, pixelFlags)
-    
-    itemColor = TileToColor[Tile(1)]
-    begin_x, begin_y = listy[0]
-    
-    '''
-    for row in data:
-        print ("".join(map(str,row)))
-    '''
-    
-    outline = []
-    rect = path.path()
-    for (x,y) in listy: 
-        rect.append(path.moveto(y,x))
-                        # Move to current colomn position within the row
-        rect.append(path.lineto(y+1,x))
-        rect.append(path.lineto(y+1,x+1))
-        rect.append(path.lineto(y,x+1))
-        rect.append(path.closepath())                                
-
+    for x in range(1,2): # width col 
+        for y in range(1,2): # height row
+            # determine pixel type
+            tileType = Tile(data[x][y])
+            # skip if this pixel has already been drawn or blank space
+            if pixelFlags[x][y] or tileType == Tile.BLANK: continue
+            # set flag as draw
+           
+            # create new path to draw
+            p = path.path()
+            # get actual x,y
+            dx = x * BlockSize
+            dy = y * BlockSize
+            
+            # move to tmid
+            p.append(path.moveto_pt(*TopMid(dx,dy)))
+            # Determine shape of top left corner
+            if NV(3,x,y):
+                if (NV(0,x,y) and NV(1,x,y)) or (not NV(0,x,y) and not NV(1,x,y)): # Right Angle
+                    p.append(path.lineto_pt(dx,dy))
+                    p.append(path.lineto_pt(dx,dy+hBlockSize))
+                elif(NV(0,x,y) and not NV(1,x,y)): # Cowlick
+                    p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,dx,dy-hBlockSize))
+                    p.append(path.lineto_pt(*LeftMid(dx, dy)))
+            else:
+                p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,(*LeftMid(dx,dy))))
+            
+            # Keep count of how far we progress
+            yCount = 0
+            # Determine if there is more blocks to goto
+            if (NV(7,x,y) or not (y+1 >= height)):
+                # Continue until we find an end
+                for yc in range(y+1,height):
+                    dyc = yc * BlockSize    
+                    # Break if this block is not acceptable
+                    if pixelFlags[x][yc] or tileType == Tile.BLANK: break
+                    # Otherwise we good
+                    pixelFlags[x][yc] = 1
+                    yCount += 1 
                     
-    # Draw the box on the canvas
-    c.stroke(rect, 
-             [
-                 style.linewidth.THICK,
-                 #deco.filled([itemColor]),
-                 itemColor
-            ])
+                    # Move pen to new origin
+                    p.append(path.lineto_pt(dx, dyc))
+                    
+                    # Determine if we need to cowlick left or continue straight
+                    print (x,yc)
+                    if (NV(0,x,yc) and not NV(3,x,yc)):
+                        p.append(path.lineto_pt(dx - hBlockSize, dyc))
+                        p.append(path.curveto_pt(dx-hBlockSize,dyc,dx,dyc,(*LeftMid(dx,dyc))))
+                    # Else just go straight
+                    else:
+                        p.append(path.lineto_pt(*LeftMid(dx,dyc)))
+                
+            # At the end of the block, draw bottom left corner
+            # TODO continue here
+                
+                
+
+                
+                
+                
+            # Draw the path
+            c.stroke(p, 
+                 [
+                     style.linewidth.THICK,
+                     color.rgb.black
+                ])
+                    
+
+                        
+            
+                
+                
+        
+
     cc = canvas.canvas()
     cc.insert(c,[trafo.mirror()])
     cc.writeSVGfile('output/testy')
