@@ -237,6 +237,18 @@ if __name__ == '__main__':
                 
             # At the end of the block, draw bottom left corner
             # TODO continue here
+            end_y = y + yCount 
+            dey = end_y * BlockSize
+            print(data[x])
+            print (data[x][end_y-1])
+            print (data[x-1][end_y])
+            # Right angle
+            if NV(3,x,end_y):
+                p.append(path.lineto_pt(dx, dey + BlockSize))
+                p.append(path.lineto_pt(*BotMid(dx, dey)))
+            else:
+                p.append(path.curveto_pt(dx,dey + hBlockSize,dx,dey + BlockSize,(*BotMid(dx,dey))))
+            
                 
                 
 
