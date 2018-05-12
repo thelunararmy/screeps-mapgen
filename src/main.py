@@ -6,10 +6,8 @@ Created on May 10, 2018
 import json
 from enum import Enum
 from pyx import *
-from queue import *
-from gettext import find
 
-# Ebnumerator for tile types
+# Enumerator for tile types
 class Tile(Enum):
     BLANK = 0
     WALL = 1
@@ -24,8 +22,11 @@ TileToColor = {
     Tile.UNKOWN :   color.rgb.blue
 }
 
-BlockSize = 100
+# Output block sizes 
+BlockSize = 50
 hBlockSize = BlockSize / 2
+
+# Globals for cross size
 global width, height, data
 
 def ConvertJsonMapToArrays (jsonfilename,debug = False):
@@ -35,8 +36,6 @@ def ConvertJsonMapToArrays (jsonfilename,debug = False):
         data = json.load(file)
     
     # Fetch rows in 50 character increments
-    if debug: print (data['terrain'],'\n')
-    d = data['terrain']
     rows = [data['terrain'][x*50:(x+1)*50] for x in range(0,50)]
     if debug: 
         for row in rows: print (row)
@@ -45,7 +44,7 @@ def ConvertJsonMapToArrays (jsonfilename,debug = False):
     # Return data
     return [[int(x) for x in row] for row in rows]
 
-def BasicMapGenerator(data):
+def BasicMapGenerator():
     c = canvas.canvas()
     rowblobs = []
     for row in data:
@@ -69,7 +68,7 @@ def BasicMapGenerator(data):
         rowblobs.append(blobs)  
     
     # Draw Row blobs
-    for rowPos,blobs in enumerate(rowblobs[::-1]):
+    for rowPos,blobs in enumerate(rowblobs):
         colPos = 0
         for (itemType,blobSize) in blobs:
             # Get the blob's color to draw
@@ -99,26 +98,7 @@ def BasicMapGenerator(data):
             # At the end of the blob, move new pen x-pos origin to blob size
             colPos += blobSize  
     # Write svg 
-    c.writeSVGfile('output/testy')
-
-def FindNeighbours(data, width, height, start_x, start_y, pixelFlags):
-    listOfNeighbours = []
-    
-    q = Queue()
-    q.put_nowait((start_x,start_y))
-    
-    while not q.empty():
-        (px,py) = q.get_nowait()
-        tileType = Tile(data[px][py])
-        for x in range(px-1,px+2):
-            for y in range(py-1,py+2):
-                if IsInMapRange(x, y, width, height) and (x == px or y == py) :
-                    if Tile(data[x][y]) == tileType and not pixelFlags[x][y]:
-                        pixelFlags[x][y] = 1
-                        listOfNeighbours.append((x,y))
-                        q.put_nowait((x,y))
-                        
-    return listOfNeighbours
+    return c
 
 def TopMid (x,y):
     return x + hBlockSize, y
@@ -129,149 +109,194 @@ def BotMid (x,y):
 def RightMid (x,y):
     return x + BlockSize, y + hBlockSize
 
-def NV (pos,x,y):
+def NV (pos,y,x,debug = False):
     ''' Determines the value of the neighbourhood pixel '''
     '''     012
-            3♥5
-            678 where ♥ = position of our pixel ''' 
-    tileType = Tile(data[x][y])
+            3z5
+            678 where z = position of our pixel ''' 
+    tileType = Tile(data[y][x])
     relX = 0
     relY = 0
     if (pos == 0):
-        relY = -1
         relX = -1
+        relY = -1
     elif(pos == 1):
-        relX = -1
+        relY = -1
     elif(pos == 2):
-        relY = 1
-        relX = -1
+        relX = 1
+        relY = -1
     elif(pos == 3):
-        relY = -1
+        relX = -1
     elif(pos == 5):
-        relY = 1
+        relX = 1
     elif(pos == 6):
-        relY = -1
-        relX = 1
-    elif(pos == 7):
-        relX = 1
-    elif(pos == 8):
+        relX = -1
         relY = 1
+    elif(pos == 7):
+        relY = 1
+    elif(pos == 8):
         relX = 1
-    deltaX = x + relX
+        relY = 1
+    deltaX = x + relX 
     deltaY = y + relY
-    if deltaX < 0 or deltaX >= width or deltaY < 0 or deltaY >= height:
-        return tileType == Tile.WALL
-    else:
-        return tileType == Tile(data[deltaX][deltaY])
     
+    if debug: print((y,x),(relY,relX),(deltaY,deltaX))
+    
+    if deltaX < 0 or deltaX >= height or deltaY < 0 or deltaY >= width:
+        return tileType == Tile.BLANK
+    else:
+        if debug: print(Tile(data[deltaY][deltaX]),tileType == Tile(data[deltaY][deltaX]))
+        return tileType == Tile(data[deltaY][deltaX])
+
+def DrawCurvedMap():
+    # Setup pixel registry
+    pixelFlags = [[0] * width for _ in range(height)]
+    
+    # Iterate column by column
+    for y in range(0,height): # width col 
+        for x in range(0,width):
+            # determine pixel type
+            tileType = Tile(data[y][x])
+            itemColor = TileToColor[tileType]
+            
+            # skip if this pixel has already been drawn or blank space
+            if pixelFlags[y][x] or tileType == Tile.BLANK: continue
+
+            # create new path to draw
+            p = path.path()
+            # get actual x,y
+            dx = x * BlockSize
+            dy = y * BlockSize
+
+            # Move to start position
+            p.append(path.moveto_pt(*TopMid(dx,dy)))       
+                        
+            # Top Left corner
+            if NV(3,y,x):
+                if (NV(0,y,x) and NV(1,y,x)) or (not NV(0,y,x) and not NV(1,y,x)): # Right Angle
+                    p.append(path.lineto_pt(dx,dy))
+                    p.append(path.lineto_pt(dx,dy+hBlockSize))
+                elif(NV(0,y,x) and not NV(1,y,x)): # Cowlick
+                    p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,dx,dy-hBlockSize))
+                    p.append(path.lineto_pt(*LeftMid(dx, dy)))
+            else:
+                p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,(*LeftMid(dx,dy))))
+            
+            # Iterate through rest of column for continuous path
+            yc = y    
+            dyc = yc * BlockSize    
+            while (NV(7,yc,x)) and (yc+1 < height):
+                # Move to next block
+                yc += 1 
+                # Continue until we find an end
+                dyc = yc * BlockSize             
+                
+                # Otherwise we good
+                pixelFlags[yc][x] = 1
+                
+                # Move pen to new origin
+                p.append(path.lineto_pt(dx, dyc))
+                
+                # Determine if we need to cowlick left or continue straight
+                if (NV(0,yc,x) and not NV(3,yc,x)):
+                    p.append(path.lineto_pt(dx - hBlockSize, dyc))
+                    p.append(path.curveto_pt(dx-hBlockSize,dyc,dx,dyc,(*LeftMid(dx,dyc))))
+                # Else just go straight
+                else:
+                    p.append(path.lineto_pt(*LeftMid(dx,dyc)))
+                
+            # Bottom left corner
+            if NV(3,yc,x): # Right angle
+                p.append(path.lineto_pt(dx, dyc + BlockSize))
+                p.append(path.lineto_pt(*BotMid(dx, dyc)))
+            else: # Round Curve
+                p.append(path.curveto_pt(dx,dyc + hBlockSize,dx,dyc + BlockSize,(*BotMid(dx,dyc))))
+            
+            # Bottom right corner
+            if NV(5,yc,x): # Right angle
+                p.append(path.lineto_pt(dx + BlockSize, dyc + BlockSize))
+                p.append(path.lineto_pt(*RightMid(dx, dyc)))
+            else: # Round Curve
+                p.append(path.curveto_pt(*BotMid(dx,dyc),dx + BlockSize ,dyc + BlockSize,(*RightMid(dx,dyc))))
+    
+    
+            # Do lbit between BR and curve line going up
+            # Determine if we need to cowlick right or continue straight
+            if (NV(2,yc,x) and not NV(5,yc,x)):   
+                p.append(path.curveto_pt(*RightMid(dx, dyc),dx + BlockSize, dyc,dx + BlockSize + hBlockSize, dyc))
+                p.append(path.lineto_pt(dx + BlockSize, dyc))
+            # Else just go straight
+            else:
+                p.append(path.lineto_pt(*RightMid(dx,dyc)))
+    
+    
+            # Iterate up column for continuous path   
+            while (NV(1,yc,x)and (yc-1 > 0)):
+                # Move to next block
+                yc -= 1 
+                # Continue until we find an end
+                dyc = yc * BlockSize    
+                            
+                # Move pen to new origin
+                p.append(path.lineto_pt(*RightMid(dx, dyc)))
+                
+                # Determine if we need to cowlick right or continue straight
+                if (NV(2,yc,x) and not NV(5,yc,x)):   
+                    p.append(path.curveto_pt(*RightMid(dx, dyc),dx + BlockSize, dyc,dx + BlockSize + hBlockSize, dyc))
+                    p.append(path.lineto_pt(dx + BlockSize, dyc))
+                # Else just go straight
+                else:
+                    p.append(path.lineto_pt(*RightMid(dx,dyc)))
+        
+            # Top right corner
+            if NV(5,y,x):
+                if (NV(1,y,x) and NV(2,y,x)) or (not NV(1,y,x) and not NV(2,y,x)): # Right Angle
+                    p.append(path.lineto_pt(dx + BlockSize,dy))
+                    p.append(path.lineto_pt(*TopMid(dx, dy)))
+                elif(not NV(1,y,x) and NV(2,y,x)): # Cowlick
+                    p.append(path.lineto_pt(dx+BlockSize, dy-hBlockSize))
+                    p.append(path.curveto_pt(dx+BlockSize, dy-hBlockSize,dx+ BlockSize,dy,*TopMid(dx,dy)))
+            else:
+                p.append(path.curveto_pt((*RightMid(dx,dy)),dx+BlockSize,dy,(*TopMid(dx,dy))))    
+        
+            # Close the completed path
+            p.append(path.closepath())
+                               
+            # Draw the path
+            c.stroke(p, 
+                     [
+                         style.linewidth.THICK,
+                         deco.filled([itemColor]),
+                         itemColor
+                    ])                   
+
+    return c
+
     
 
 def IsInMapRange(x,y):
     return not (x < 0 or x >= width or y < 0 or y >= height)
 
 if __name__ == '__main__':
+    # Say hello then do work
+    print ("Drawing map...")
+        
     # Fetch the data
-    data = ConvertJsonMapToArrays('data/testdata01.json', False)
+    data = ConvertJsonMapToArrays('data/testdata01.json', True)
 
-    #BasicMapGenerator(data)
     c = canvas.canvas()
-    
-    data = [[1,0,0,0],[1,1,0,0],[0,1,0,0],[0,1,0,0]]
-    
     width = len(data[0])
     height = len(data)
     
-    pixelFlags = [[0] * width for _ in range(height)]
+    # Draw curved map
+    c = DrawCurvedMap()
+    # c = BasicMapGenerator() #just in case
     
-    for x in range(1,2): # width col 
-        for y in range(1,2): # height row
-            # determine pixel type
-            tileType = Tile(data[x][y])
-            # skip if this pixel has already been drawn or blank space
-            if pixelFlags[x][y] or tileType == Tile.BLANK: continue
-            # set flag as draw
-           
-            # create new path to draw
-            p = path.path()
-            # get actual x,y
-            dx = x * BlockSize
-            dy = y * BlockSize
-            
-            # move to tmid
-            p.append(path.moveto_pt(*TopMid(dx,dy)))
-            # Determine shape of top left corner
-            if NV(3,x,y):
-                if (NV(0,x,y) and NV(1,x,y)) or (not NV(0,x,y) and not NV(1,x,y)): # Right Angle
-                    p.append(path.lineto_pt(dx,dy))
-                    p.append(path.lineto_pt(dx,dy+hBlockSize))
-                elif(NV(0,x,y) and not NV(1,x,y)): # Cowlick
-                    p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,dx,dy-hBlockSize))
-                    p.append(path.lineto_pt(*LeftMid(dx, dy)))
-            else:
-                p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,(*LeftMid(dx,dy))))
-            
-            # Keep count of how far we progress
-            yCount = 0
-            # Determine if there is more blocks to goto
-            if (NV(7,x,y) or not (y+1 >= height)):
-                # Continue until we find an end
-                for yc in range(y+1,height):
-                    dyc = yc * BlockSize    
-                    # Break if this block is not acceptable
-                    if pixelFlags[x][yc] or tileType == Tile.BLANK: break
-                    # Otherwise we good
-                    pixelFlags[x][yc] = 1
-                    yCount += 1 
-                    
-                    # Move pen to new origin
-                    p.append(path.lineto_pt(dx, dyc))
-                    
-                    # Determine if we need to cowlick left or continue straight
-                    print (x,yc)
-                    if (NV(0,x,yc) and not NV(3,x,yc)):
-                        p.append(path.lineto_pt(dx - hBlockSize, dyc))
-                        p.append(path.curveto_pt(dx-hBlockSize,dyc,dx,dyc,(*LeftMid(dx,dyc))))
-                    # Else just go straight
-                    else:
-                        p.append(path.lineto_pt(*LeftMid(dx,dyc)))
-                
-            # At the end of the block, draw bottom left corner
-            # TODO continue here
-            end_y = y + yCount 
-            dey = end_y * BlockSize
-            print(data[x])
-            print (data[x][end_y-1])
-            print (data[x-1][end_y])
-            # Right angle
-            if NV(3,x,end_y):
-                p.append(path.lineto_pt(dx, dey + BlockSize))
-                p.append(path.lineto_pt(*BotMid(dx, dey)))
-            else:
-                p.append(path.curveto_pt(dx,dey + hBlockSize,dx,dey + BlockSize,(*BotMid(dx,dey))))
-            
-                
-                
-
-                
-                
-                
-            # Draw the path
-            c.stroke(p, 
-                 [
-                     style.linewidth.THICK,
-                     color.rgb.black
-                ])
-                    
-
-                        
-            
-                
-                
-        
-
+    # Put it on new canvas to size and mirro'd correctly
+    # TODO: get size correctly
     cc = canvas.canvas()
     cc.insert(c,[trafo.mirror()])
     cc.writeSVGfile('output/testy')
     
     
-    print ('Done')
+    print ('...Done')
