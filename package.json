@@ -1,0 +1,23 @@
+{
+  "name": "screeps-mapgen",
+  "version": "1.0.0",
+  "description": "screeps-mapgen",
+  "main": "./index.js",
+  "scripts": {
+    "test": "echo \"No test specified\""
+  },
+  "bin": "./bin/screeps-mapgen",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thelunararmy/screeps-mapgen.git"
+  },
+  "author": "thelunararmy",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/thelunararmy/screeps-mapgen/issues"
+  },
+  "homepage": "https://github.com/thelunararmy/screeps-mapgen#readme",
+  "dependencies": {
+    "argparse": "^1.0.10"
+  }
+}

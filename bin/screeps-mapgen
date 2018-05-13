@@ -1,0 +1,124 @@
+#!/usr/bin/env node
+'use strict'
+
+/**
+ * Dependencies
+ * @ignore
+ */
+const cwd = process.cwd()
+const path = require('path')
+const fs = require('fs')
+const rootPath = path.join(__dirname, '..')
+const ArgumentParser = require('argparse').ArgumentParser
+const Room = require(path.join(rootPath, 'src'))
+
+/**
+ * Constants
+ * @ignore
+ */
+const config = require(path.join(rootPath, 'package.json'))
+
+/**
+ * Parser
+ * @ignore
+ */
+const parser = new ArgumentParser({
+  version: config.version,
+  addHelp: true,
+  description: 'Generate a SVG map from screeps terrian data',
+})
+
+parser.addArgument(
+  [ '-g', '--grid' ],
+  {
+    help: 'Draw a grid over the map',
+    defaultValue: false,
+    action: 'storeTrue',
+  }
+)
+
+parser.addArgument(
+  [ '-s', '--swamp' ],
+  {
+    help: 'Draw swamp on the map',
+    defaultValue: false,
+    action: 'storeTrue',
+  }
+)
+
+parser.addArgument(
+  [ '-b', '--background' ],
+  {
+    help: 'Include background image under the map',
+    defaultValue: false,
+    action: 'storeTrue',
+  }
+)
+
+parser.addArgument(
+  [ '-t', '--no-terrain' ],
+  {
+    help: 'Disable drawing of terrain on the map',
+    defaultValue: true,
+    action: 'storeFalse',
+    dest: 'terrain'
+  }
+)
+
+parser.addArgument(
+  'data',
+  {
+    help: 'Map data (JSON or raw) or path to input file',
+  }
+)
+
+/**
+ * Make SVG
+ * @ignore
+ */
+const args = parser.parseArgs()
+// console.error(args)
+let { grid, terrain, data, swamp, background } = args
+
+if (data.startsWith('"')) {
+  try {
+    data = data.strip('"').filter(d => !!d)[0]
+  } catch (err) {
+    console.error('Invalid input')
+    process.exit(1)
+  }
+
+} else if (data.startsWith("'")) {
+  try {
+    data = data.strip("'").filter(d => !!d)[0]
+  } catch (err) {
+    console.error('Invalid input')
+    process.exit(1)
+  }
+
+} else if (data.startsWith('{')) {
+  try {
+    const json = JSON.parse(file)
+    data = json['terrain']
+  } catch (err) {
+    console.error('Failed to parse JSON file')
+    process.exit(1)
+  }
+
+} else if (data.startsWith('1') || data.startsWith('0')) {
+  // Do nothing
+} else {
+  try {
+    const file = fs.readFileSync(data.startsWith('.') ? path.join(cwd, data) : data, { encoding: 'utf8' })
+    // console.error(file)
+    const json = JSON.parse(file)
+    data = json['terrain']
+  } catch (err) {
+    console.error('Failed to parse JSON file')
+    process.exit(1)
+  }
+}
+
+const room = new Room(data)
+console.log(room.buildSVG(grid, swamp, terrain, background))
+// room.drawDebugText()
