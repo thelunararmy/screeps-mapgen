@@ -1,5 +1,7 @@
 # Screeps SVG Map Generator _(screeps-mapgen)_
 
+## CLI Usage
+
 ```
 usage: screeps-mapgen [-h] [-v] [-g] [-s] [-b] [-t] data
 
@@ -17,3 +19,21 @@ Optional arguments:
   -t, --no-terrain  Disable drawing of terrain on the map
 ```
 
+## Script Usage
+
+```javascript
+'use strict'
+
+const Map = require('screeps-mapgen')
+const roomData = require('.../rooms.terrain.json')
+
+// Draw maps
+const svgData = roomData.map(room => new Map(room.terrain).buildSVG(
+  true, // Grid overlay
+  true, // Draw swamp
+  true, // Draw terrain
+  true  // Include background
+))
+
+// Write maps (svgData) to different files
+```
