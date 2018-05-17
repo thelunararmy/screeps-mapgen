@@ -6,24 +6,25 @@ Created on May 10, 2018
 import json
 from enum import Enum
 from pyx import *
+from mapgen import *
 
 # Enumerator for tile types
 class Tile(Enum):
     BLANK = 0
     WALL = 1
     SWAMP = 2
-    UNKOWN = 3
+    UNKNOWN = 3
 
 # Map tile type to color
 TileToColor = {
     Tile.BLANK  :   color.rgb.white,
     Tile.WALL   :   color.rgb.black,
     Tile.SWAMP  :   color.rgb.green,
-    Tile.UNKOWN :   color.rgb.blue
+    Tile.UNKNOWN :   color.rgb.blue
 }
 
 # Output block sizes 
-BlockSize = 50
+BlockSize = 30
 hBlockSize = BlockSize / 2
 
 # Globals for cross size
@@ -142,7 +143,7 @@ def NV (pos,y,x,debug = False):
     
     if debug: print((y,x),(relY,relX),(deltaY,deltaX))
     
-    if deltaX < 0 or deltaX >= height or deltaY < 0 or deltaY >= width:
+    if deltaX < 0 or deltaX >= width or deltaY < 0 or deltaY >= height:
         return tileType == Tile.BLANK
     else:
         if debug: print(Tile(data[deltaY][deltaX]),tileType == Tile(data[deltaY][deltaX]))
@@ -180,7 +181,7 @@ def DrawCurvedMap():
                     p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,dx,dy-hBlockSize))
                     p.append(path.lineto_pt(*LeftMid(dx, dy)))
             else:
-                p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,(*LeftMid(dx,dy))))
+                p.append(path.curveto_pt(*TopMid(dx,dy),dx,dy,(*(LeftMid(dx,dy)))))
             
             # Iterate through rest of column for continuous path
             yc = y    
@@ -222,7 +223,7 @@ def DrawCurvedMap():
     
             # Do lbit between BR and curve line going up
             # Determine if we need to cowlick right or continue straight
-            if (NV(2,yc,x) and not NV(5,yc,x)):   
+            if (NV(2,yc,x) and not NV(5,yc,x) and NV(1,yc,x)):   
                 p.append(path.curveto_pt(*RightMid(dx, dyc),dx + BlockSize, dyc,dx + BlockSize + hBlockSize, dyc))
                 p.append(path.lineto_pt(dx + BlockSize, dyc))
             # Else just go straight
@@ -241,7 +242,7 @@ def DrawCurvedMap():
                 p.append(path.lineto_pt(*RightMid(dx, dyc)))
                 
                 # Determine if we need to cowlick right or continue straight
-                if (NV(2,yc,x) and not NV(5,yc,x)):   
+                if (NV(2,yc,x) and not NV(5,yc,x) and NV(1,yc,x)):   
                     p.append(path.curveto_pt(*RightMid(dx, dyc),dx + BlockSize, dyc,dx + BlockSize + hBlockSize, dyc))
                     p.append(path.lineto_pt(dx + BlockSize, dyc))
                 # Else just go straight
@@ -277,12 +278,25 @@ def DrawCurvedMap():
 def IsInMapRange(x,y):
     return not (x < 0 or x >= width or y < 0 or y >= height)
 
+def Classify (point):
+    res = 0
+    if (point <= 0.50):
+        return 0
+    if (point > 0.50):
+        return 1
+        
 if __name__ == '__main__':
     # Say hello then do work
     print ("Drawing map...")
         
     # Fetch the data
-    data = ConvertJsonMapToArrays('data/testdata01.json', True)
+    # data = ConvertJsonMapToArrays('data/testdata01.json', True)
+
+    # Custom map gen stuff here
+    perlinMap = PerlinMapGen(50,50)
+        
+    data = [[Classify(x) for x in row] for row in perlinMap.map]
+    for row in data: print ("".join(["%d"%d for d in row]))
 
     c = canvas.canvas()
     width = len(data[0])
