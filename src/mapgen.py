@@ -6,6 +6,8 @@ Created on May 17, 2018
 @author: thelunararmy
 '''
 
+from sys import float_info
+
 global Permutation, P, Repeat
 Permutation = [151,160,137,91,90,15,                    
         131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,    
@@ -28,6 +30,8 @@ Repeat = -1
 def Lerp (a,b,x):
     return ( a + x * (b - a))
 
+def InverseLerp (a,b,x):
+    return (x - a) / (b - a)
 
 def Fade (t):
     return t * t * t * ( t * ( t * 6 - 15 ) + 10 )
@@ -108,18 +112,28 @@ def OctavePerlin(x, y, z, octaves, persistence):
     
 
 class PerlinMapGen():
-    def __init__(self,x,y):
+    def __init__(self,x,y,scale):
         self.x = 1 if x < 0 else x
         self.y = 1 if y < 0 else y
+        self.scale = 0.1 if scale < 0 else scale
         # Generate our Perlinmap
         self.map = []
+        
+        maxValue = float_info.min
+        minValue = float_info.max
+        
         for y in range(0,self.y):
             row = []
             for x in range (0,self.x):
-                pvalue = OctavePerlin(x*0.1, y*0.1, 0, 10, .5 )
+                pvalue = OctavePerlin(x*self.scale, y*self.scale, 0, 10, .5 )
                 row.append(pvalue)
+                maxValue = pvalue if pvalue > maxValue else maxValue
+                minValue = pvalue if pvalue < minValue else minValue
             self.map.append(row)
         
+        for y in range(0,self.y):
+            for x in range (0,self.x):
+                self.map[y][x] = InverseLerp(minValue, maxValue, self.map[y][x])
                 
         
         

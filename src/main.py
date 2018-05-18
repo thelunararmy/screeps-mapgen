@@ -8,28 +8,78 @@ from enum import Enum
 from pyx import *
 from mapgen import *
 
+# Program Mode
+class Mode(Enum):
+    SCREEPS = 0
+    WORLDGEN = 1
+
 # Enumerator for tile types
-class Tile(Enum):
+class ScreepTile(Enum):
     BLANK = 0
     WALL = 1
     SWAMP = 2
     UNKNOWN = 3
 
+class WorldTile(Enum):
+    DEEP_WATER = 1
+    SHALLOW_WATER = 2
+    SHORE = 3
+    BEACH = 4
+    GRASS = 5
+    THICK_GRASS = 6
+    ROCK = 7
+    MOUNTAIN = 8
+    SUMMIT = 9
+    ICE = 10
+    BLANK = 0
+        
 # Map tile type to color
-TileToColor = {
-    Tile.BLANK  :   color.rgb.white,
-    Tile.WALL   :   color.rgb.black,
-    Tile.SWAMP  :   color.rgb.green,
-    Tile.UNKNOWN :   color.rgb.blue
+ScreepsTileToColor = {
+    ScreepTile.BLANK  :   color.rgb.white,
+    ScreepTile.WALL   :   color.rgb.black,
+    ScreepTile.SWAMP  :   color.rgb.green,
+    ScreepTile.UNKNOWN :   color.rgb.blue
+}
+
+WorldTileToColor = {
+    WorldTile.DEEP_WATER    : color.rgb(*[c / 255.0 for c in [1,87,182]]),
+    WorldTile.SHALLOW_WATER : color.rgb(*[c / 255.0 for c in [0,162,232]]),
+    WorldTile.SHORE         : color.rgb(*[c / 255.0 for c in [153,217,234]]),
+    WorldTile.BEACH         : color.rgb(*[c / 255.0 for c in [220,200,160]]),
+    WorldTile.GRASS         : color.rgb(*[c / 255.0 for c in [176,255,111]]),
+    WorldTile.THICK_GRASS   : color.rgb(*[c / 255.0 for c in [58,166,32]]),
+    WorldTile.ROCK          : color.rgb(*[c / 255.0 for c in [175,124,73]]),
+    WorldTile.MOUNTAIN      : color.rgb(*[c / 255.0 for c in [143,97,54]]),
+    WorldTile.SUMMIT        : color.rgb(*[c / 255.0 for c in [98,63,53]]),
+    WorldTile.ICE           : color.rgb(*[c / 255.0 for c in [235,235,235]]),
+    WorldTile.BLANK         : color.rgb.white
 }
 
 # Output block sizes 
-BlockSize = 30
+BlockSize = 20
 hBlockSize = BlockSize / 2
+mode = Mode.WORLDGEN
 
 # Globals for cross size
 global width, height, data
 
+def Tile (value):
+    if mode == Mode.SCREEPS:
+        return ScreepTile(value)
+    elif mode == Mode.WORLDGEN:
+        return WorldTile(value)
+    else:
+        raise ValueError
+    
+def TileToColor (value):
+    if mode == Mode.SCREEPS:
+        return ScreepsTileToColor[value]
+    elif mode == Mode.WORLDGEN:
+        return WorldTileToColor[value]
+    else:
+        raise ValueError
+    
+    
 def ConvertJsonMapToArrays (jsonfilename,debug = False):
     ''' Converts json file from Screeps into 50x50 rows to be manipulated '''
     # load json file and extract data
@@ -73,12 +123,12 @@ def BasicMapGenerator():
         colPos = 0
         for (itemType,blobSize) in blobs:
             # Get the blob's color to draw
-            itemColor = TileToColor[Tile(itemType)]
+            itemColor = TileToColor(Tile(itemType))
             
             # Determine blob type 
-            if itemType == 0: # this is white space, so just ignore everything
+            if itemType == Tile(0): # this is white space, so just ignore everything
                 pass    
-            elif itemType in [1,2,3]: # this is actual fill
+            else: # this is actual fill
                 rect = path.path(
                     # Move to current colomn position within the row
                     path.moveto(colPos,rowPos),
@@ -144,7 +194,7 @@ def NV (pos,y,x,debug = False):
     if debug: print((y,x),(relY,relX),(deltaY,deltaX))
     
     if deltaX < 0 or deltaX >= width or deltaY < 0 or deltaY >= height:
-        return tileType == Tile.BLANK
+        return tileType == Tile(0)
     else:
         if debug: print(Tile(data[deltaY][deltaX]),tileType == Tile(data[deltaY][deltaX]))
         return tileType == Tile(data[deltaY][deltaX])
@@ -158,10 +208,10 @@ def DrawCurvedMap():
         for x in range(0,width):
             # determine pixel type
             tileType = Tile(data[y][x])
-            itemColor = TileToColor[tileType]
+            itemColor = TileToColor(tileType)
             
             # skip if this pixel has already been drawn or blank space
-            if pixelFlags[y][x] or tileType == Tile.BLANK: continue
+            if pixelFlags[y][x] or tileType == Tile(0): continue
 
             # create new path to draw
             p = path.path()
@@ -278,12 +328,33 @@ def DrawCurvedMap():
 def IsInMapRange(x,y):
     return not (x < 0 or x >= width or y < 0 or y >= height)
 
-def Classify (point):
-    res = 0
-    if (point <= 0.50):
-        return 0
-    if (point > 0.50):
-        return 1
+def Classify (val):
+    if   mode == Mode.SCREEPS: return int(val)
+    elif mode == Mode.WORLDGEN :
+        ret = 0
+        if val <= 0.10: 
+            ret = WorldTile.DEEP_WATER
+        if val > 0.10:
+            ret = WorldTile.SHALLOW_WATER
+        if val > 0.30:
+            ret = WorldTile.SHORE
+        if val > 0.40:
+            ret = WorldTile.BEACH
+        if val > 0.48:
+            ret = WorldTile.GRASS
+        if val > 0.60:
+            ret = WorldTile.THICK_GRASS
+        if val > 0.65:
+            ret = WorldTile.ROCK
+        if val > 0.80:
+            ret = WorldTile.MOUNTAIN
+        if val > 0.85:
+            ret = WorldTile.SUMMIT
+        if val > 0.98:
+            ret = WorldTile.ICE
+        return ret
+    else:
+        raise ValueError
         
 if __name__ == '__main__':
     # Say hello then do work
@@ -293,18 +364,18 @@ if __name__ == '__main__':
     # data = ConvertJsonMapToArrays('data/testdata01.json', True)
 
     # Custom map gen stuff here
-    perlinMap = PerlinMapGen(50,50)
+    perlinMap = PerlinMapGen(85,31,0.05)
         
     data = [[Classify(x) for x in row] for row in perlinMap.map]
-    for row in data: print ("".join(["%d"%d for d in row]))
+    #for row in data: print ("".join(["%d"%d for d in row]))
 
     c = canvas.canvas()
     width = len(data[0])
     height = len(data)
     
     # Draw curved map
-    c = DrawCurvedMap()
-    # c = BasicMapGenerator() #just in case
+    #c = DrawCurvedMap()
+    c = BasicMapGenerator() #just in case
     
     # Put it on new canvas to size and mirro'd correctly
     # TODO: get size correctly
